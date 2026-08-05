@@ -6,6 +6,7 @@ class Person:
     gedcom_id: str
     first_name: str | None = None
     last_name: str | None = None
+    married_name: str | None = None
     sex: str | None = None
 
     birth_date: str | None = None

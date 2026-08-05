@@ -11,33 +11,52 @@ def decode_gedcom(
     if encoding:
         return raw_data.decode(encoding)
 
-    # UTF-8 BOM
-    if raw_data.startswith(b"\xef\xbb\xbf"):
-        try:
-            return raw_data.decode("utf-8-sig")
-        except UnicodeDecodeError:
-            pass
-
     # UTF-16 BOM
     if raw_data.startswith((b"\xff\xfe", b"\xfe\xff")):
-        try:
-            return raw_data.decode("utf-16")
-        except UnicodeDecodeError:
-            pass
+        return raw_data.decode("utf-16")
 
-    # Standard UTF-8
+    # Try normal UTF-8 first
     try:
-        return raw_data.decode("utf-8")
+        return raw_data.decode("utf-8-sig")
     except UnicodeDecodeError:
         pass
 
-    # Automatic detection for legacy files
-    detected = from_bytes(raw_data).best()
+    # File appears to contain mostly UTF-8 with legacy bytes
+    return decode_mixed_utf8_cp1250(raw_data)
 
-    if detected is None:
-        raise ValueError("Unable to determine GEDCOM file encoding.")
+def decode_mixed_utf8_cp1250(raw_data: bytes) -> str:
+    """
+    Decode a primarily UTF-8 file while recovering individual
+    legacy Windows-1250 bytes.
+    """
 
-    return str(detected)
+    if raw_data.startswith(b"\xef\xbb\xbf"):
+        raw_data = raw_data[3:]
+
+    text = raw_data.decode("utf-8", errors="surrogateescape")
+
+    result = []
+    legacy_bytes = bytearray()
+
+    def flush_legacy_bytes():
+        if legacy_bytes:
+            result.append(
+                legacy_bytes.decode("cp1250", errors="replace")
+            )
+            legacy_bytes.clear()
+
+    for char in text:
+        code = ord(char)
+
+        if 0xDC80 <= code <= 0xDCFF:
+            legacy_bytes.append(code - 0xDC00)
+        else:
+            flush_legacy_bytes()
+            result.append(char)
+
+    flush_legacy_bytes()
+
+    return "".join(result)
 
 def parse_gedcom(
     file,
@@ -96,12 +115,16 @@ def parse_gedcom(
                 current_event = "death"
 
         # Event details
-        elif level == "2" and current_event:
-            if tag == "DATE":
-                set_event_date(current_person, current_event, value)
+        elif level == "2":
+            if tag == "_MARNM":
+                current_person.married_name = value.strip()
 
-            elif tag == "PLAC":
-                set_event_place(current_person, current_event, value)
+            elif current_event:
+                if tag == "DATE":
+                    set_event_date(current_person, current_event, value)
+
+                elif tag == "PLAC":
+                    set_event_place(current_person, current_event, value)
 
     if current_person is not None:
         people.append(current_person)

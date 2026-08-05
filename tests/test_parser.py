@@ -1,6 +1,6 @@
 from io import BytesIO
 
-from src.gedcom_parser import parse_gedcom
+from src.gedcom_parser import parse_gedcom, decode_gedcom
 
 
 def test_parse_person():
@@ -47,3 +47,45 @@ def test_parse_cp1250_person():
     assert people[0].first_name == "Łukasz"
     assert people[0].last_name == "Żółć"
     assert people[0].birth_place == "Łódź"
+
+def test_mixed_encoding_preserves_utf8_polish_characters():
+    gedcom = (
+        b"\xef\xbb\xbf"
+        + """
+0 @I1@ INDI
+1 NAME Katarzyna /Zając/
+1 BIRT
+2 DATE 10 FEB 1895
+2 PLAC Czeladź
+""".encode("utf-8")
+    )
+
+    file = BytesIO(gedcom)
+
+    people = parse_gedcom(file)
+
+    assert len(people) == 1
+    assert people[0].first_name == "Katarzyna"
+    assert people[0].last_name == "Zając"
+    assert people[0].birth_place == "Czeladź"
+
+def test_mixed_utf8_and_cp1250_encoding():
+    utf8_part = """
+0 @I1@ INDI
+1 NAME Katarzyna /Zając/
+1 BIRT
+2 PLAC Czeladź
+""".encode("utf-8")
+
+    cp1250_part = """
+1 NOTE Łódź
+""".encode("cp1250")
+
+    raw_data = b"\xef\xbb\xbf" + utf8_part + cp1250_part
+
+    text = decode_gedcom(raw_data)
+
+    assert "Katarzyna" in text
+    assert "Zając" in text
+    assert "Czeladź" in text
+    assert "Łódź" in text
