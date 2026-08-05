@@ -89,3 +89,42 @@ def test_mixed_utf8_and_cp1250_encoding():
     assert "Zając" in text
     assert "Czeladź" in text
     assert "Łódź" in text
+
+def test_link_parents_and_child():
+    gedcom = b"""
+0 @I1@ INDI
+1 NAME Jan /Kowalski/
+1 SEX M
+
+0 @I2@ INDI
+1 NAME Anna /Nowak/
+1 SEX F
+
+0 @I3@ INDI
+1 NAME Maria /Kowalska/
+1 SEX F
+
+0 @F1@ FAM
+1 HUSB @I1@
+1 WIFE @I2@
+1 CHIL @I3@
+
+0 TRLR
+"""
+
+    people = parse_gedcom(BytesIO(gedcom))
+
+    people_by_id = {
+        person.gedcom_id: person
+        for person in people
+    }
+
+    father = people_by_id["@I1@"]
+    mother = people_by_id["@I2@"]
+    child = people_by_id["@I3@"]
+
+    assert child.father_id == "@I1@"
+    assert child.mother_id == "@I2@"
+
+    assert "@I3@" in father.children_ids
+    assert "@I3@" in mother.children_ids

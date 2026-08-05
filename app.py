@@ -2,6 +2,7 @@ import streamlit as st
 
 from src.gedcom_parser import parse_gedcom
 from src.search import search_people
+from components.person_details import show_person_details
 
 
 def get_display_name(person) -> str:
@@ -17,6 +18,9 @@ def get_display_name(person) -> str:
         for part in [person.first_name, person.last_name]
         if part
     )
+
+def close_related_person():
+    st.session_state.selected_person_id = None
 
 
 st.set_page_config(
@@ -52,6 +56,17 @@ selected_encoding = st.selectbox(
     options=encoding_options.keys(),
 )
 
+if "selected_person_id" not in st.session_state:
+    st.session_state.selected_person_id = None
+
+if "related_source_id" not in st.session_state:
+    st.session_state.related_source_id = None
+
+if "related_section" not in st.session_state:
+    st.session_state.related_section = None
+
+if "expanded_children_keys" not in st.session_state:
+    st.session_state.expanded_children_keys = set()
 
 if uploaded_file is not None:
     try:
@@ -96,6 +111,7 @@ if uploaded_file is not None:
         if birth_year_input.strip():
             try:
                 birth_year = int(birth_year_input)
+
             except ValueError:
                 birth_year_valid = False
                 st.warning("Birth year must be a number.")
@@ -112,7 +128,6 @@ if uploaded_file is not None:
             st.divider()
 
             st.subheader("Results")
-
             st.write(f"Found {len(results)} people.")
 
             if not results:
@@ -134,21 +149,34 @@ if uploaded_file is not None:
                         else "?"
                     )
 
-                    birth_place_display = (
-                        person.birth_place
-                        if person.birth_place
-                        else "Unknown place"
+                    label = (
+                        f"{full_name} "
+                        f"({birth_year_display} – {death_year_display})"
                     )
 
-                    st.write(
-                        f"**{full_name}** "
-                        f"({birth_year_display} – {death_year_display})  \n"
-                        f"{birth_place_display}"
+                    # Check whether this person's profile
+                    # should contain the related-person card
+                    is_navigation_source = (
+                        st.session_state.related_source_id
+                        == person.gedcom_id
                     )
+
+                    with st.expander(
+                        label,
+                        expanded=is_navigation_source,
+                    ):
+                        show_person_details(
+                            person,
+                            people,
+                            key_prefix=f"result_{person.gedcom_id}",
+                            navigation_source_id=person.gedcom_id,
+                        )
+
 
                 if len(results) > 50:
                     st.info(
-                        f"Showing the first 50 of {len(results)} results."
+                        f"Showing the first 50 of "
+                        f"{len(results)} results."
                     )
 
     except UnicodeDecodeError:
@@ -162,6 +190,7 @@ if uploaded_file is not None:
 
     except Exception as error:
         st.error(
-            "An unexpected error occurred while reading the GEDCOM file."
+            "An unexpected error occurred while reading "
+            "the GEDCOM file."
         )
         st.exception(error)
