@@ -1,7 +1,7 @@
 import streamlit as st
 
 from src.person_status import get_living_status
-
+from src.family_relationships import get_children_with_partner
 
 def get_display_name(person) -> str:
     if person.married_name and person.last_name:
@@ -32,6 +32,16 @@ def replace_related_person(person_id: str) -> None:
 def close_related_person() -> None:
     st.session_state.selected_person_id = None
     st.session_state.related_section = None
+
+def toggle_children(children_key: str) -> None:
+    expanded_keys = st.session_state.expanded_children_keys
+
+    if children_key in expanded_keys:
+        expanded_keys.remove(children_key)
+    else:
+        expanded_keys.add(children_key)
+
+    st.session_state.expanded_children_keys = expanded_keys
 
 def show_related_person(
     source_person,
@@ -98,6 +108,8 @@ def show_related_person_button(
     is_related_view: bool,
 ) -> None:
     if is_related_view:
+        # Inside an already opened related-person panel:
+        # replace its contents.
         st.button(
             label,
             key=key,
@@ -107,6 +119,8 @@ def show_related_person_button(
         )
 
     else:
+        # Inside the main profile:
+        # open a related-person panel in the selected section.
         st.button(
             label,
             key=key,
@@ -125,19 +139,18 @@ def show_person_details(
     key_prefix: str,
     navigation_source_id: str,
     is_related_view: bool = False,
-):
+) -> None:
     status = get_living_status(person)
 
     sex_labels = {
         "F": "Female",
         "M": "Male",
     }
-
     sex = sex_labels.get(person.sex, "Unknown")
 
     people_by_id = {
-        p.gedcom_id: p
-        for p in people
+        current_person.gedcom_id: current_person
+        for current_person in people
     }
 
     father = (
@@ -159,9 +172,10 @@ def show_person_details(
     ]
 
     with st.container(border=True):
-        col1, col2 = st.columns(2)
+        # Birth and death
+        birth_col, death_col = st.columns(2)
 
-        with col1:
+        with birth_col:
             st.markdown("#### 🌱 Birth")
 
             st.markdown(
@@ -174,7 +188,7 @@ def show_person_details(
                 f"{person.birth_place or 'Unknown'}"
             )
 
-        with col2:
+        with death_col:
             st.markdown("#### 🕯️ Death")
 
             st.markdown(
@@ -189,21 +203,22 @@ def show_person_details(
 
         st.divider()
 
-        col1, col2, col3 = st.columns(3)
+        # General information
+        sex_col, status_col, id_col = st.columns(3)
 
-        with col1:
+        with sex_col:
             st.markdown(
                 f"**Sex**  \n"
                 f"{sex}"
             )
 
-        with col2:
+        with status_col:
             st.markdown(
                 f"**Status**  \n"
                 f"{status}"
             )
 
-        with col3:
+        with id_col:
             st.markdown(
                 f"**GEDCOM ID**  \n"
                 f"`{person.gedcom_id}`"
@@ -211,6 +226,7 @@ def show_person_details(
 
         st.divider()
 
+        # Parents
         st.markdown("#### 👪 Parents")
 
         father_col, mother_col = st.columns(2)
@@ -257,29 +273,51 @@ def show_person_details(
             else:
                 st.caption("Not recorded")
 
-        show_related_person(
-            source_person=person,
-            people=people,
-            key_prefix=key_prefix,
-            navigation_source_id=navigation_source_id,
-            section="parents",
-        )
+        # Tylko główny profil może otworzyć podokno rodzica.
+        # W już otwartym podoknie kliknięcie rodzica podmienia osobę.
+        if not is_related_view:
+            show_related_person(
+                source_person=person,
+                people=people,
+                key_prefix=f"{key_prefix}_parents",
+                navigation_source_id=navigation_source_id,
+                section="parents",
+            )
 
         st.divider()
 
+        # Partners and children
         st.markdown("#### 💍 Marital status")
 
         if partners:
             for index, partner in enumerate(partners):
                 partner_name = get_display_name(partner)
 
-                col1, col2 = st.columns([1, 3])
+                children = get_children_with_partner(
+                    person,
+                    partner,
+                    people_by_id,
+                )
 
-                with col1:
-                    if index == 0:
-                        st.markdown("**Married to**")
+                partner_section = (
+                    f"partner_{partner.gedcom_id}"
+                )
 
-                with col2:
+                children_section = (
+                    f"children_{partner.gedcom_id}"
+                )
+
+                children_key = (
+                    f"{key_prefix}_children_"
+                    f"{person.gedcom_id}_"
+                    f"{partner.gedcom_id}"
+                )
+
+                partner_col, children_col = st.columns([3, 1])
+
+                with partner_col:
+                    st.markdown("**Married to**")
+
                     show_related_person_button(
                         target_person=partner,
                         label=f"{partner_name} →",
@@ -289,11 +327,124 @@ def show_person_details(
                             f"{partner.gedcom_id}"
                         ),
                         navigation_source_id=navigation_source_id,
-                        section="partner",
+                        section=partner_section,
                         is_related_view=is_related_view,
                     )
+
+                with children_col:
+                    st.markdown("**Children**")
+
+                    child_count = len(children)
+
+                    if child_count == 1:
+                        children_label = "1 child"
+                    else:
+                        children_label = (
+                            f"{child_count} children"
+                        )
+
+                    st.button(
+                        children_label,
+                        key=children_key,
+                        disabled=child_count == 0,
+                        on_click=toggle_children,
+                        args=(children_key,),
+                        use_container_width=True,
+                    )
+
+                # Profil partnera może zostać otwarty jako podokno
+                # wyłącznie z głównego profilu.
+                if not is_related_view:
+                    show_related_person(
+                        source_person=person,
+                        people=people,
+                        key_prefix=(
+                            f"{key_prefix}_{partner_section}"
+                        ),
+                        navigation_source_id=navigation_source_id,
+                        section=partner_section,
+                    )
+
+                children_are_expanded = (
+                    children_key
+                    in st.session_state.expanded_children_keys
+                )
+
+                if children_are_expanded and children:
+                    with st.container(border=True):
+                        header_col, close_col = st.columns([5, 1])
+
+                        with header_col:
+                            st.markdown(
+                                f"**Children with "
+                                f"{partner_name}**"
+                            )
+
+                        with close_col:
+                            st.button(
+                                "✕ Close",
+                                key=f"{children_key}_close",
+                                on_click=toggle_children,
+                                args=(children_key,),
+                            )
+
+                        for child in children:
+                            child_name = get_display_name(child)
+
+                            birth_year = (
+                                child.birth_year
+                                if child.birth_year
+                                else "?"
+                            )
+
+                            death_year = (
+                                child.death_year
+                                if child.death_year
+                                else "?"
+                            )
+
+                            show_related_person_button(
+                                target_person=child,
+                                label=(
+                                    f"{child_name} "
+                                    f"({birth_year} – "
+                                    f"{death_year}) →"
+                                ),
+                                key=(
+                                    f"{key_prefix}_child_"
+                                    f"{person.gedcom_id}_"
+                                    f"{partner.gedcom_id}_"
+                                    f"{child.gedcom_id}"
+                                ),
+                                navigation_source_id=(
+                                    navigation_source_id
+                                ),
+                                section=children_section,
+                                is_related_view=is_related_view,
+                            )
+
+                        # Profil dziecka otwiera się pod listą dzieci
+                        # tylko wtedy, gdy lista należy do głównego profilu.
+                        #
+                        # Jeśli lista znajduje się już w podoknie,
+                        # kliknięcie dziecka podmieni osobę dzięki
+                        # replace_related_person().
+                        if not is_related_view:
+                            show_related_person(
+                                source_person=person,
+                                people=people,
+                                key_prefix=(
+                                    f"{key_prefix}_"
+                                    f"{children_section}"
+                                ),
+                                navigation_source_id=(
+                                    navigation_source_id
+                                ),
+                                section=children_section,
+                            )
+
+                if index < len(partners) - 1:
+                    st.divider()
+
         else:
             st.markdown("**No partner recorded**")
-
-
-

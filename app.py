@@ -65,6 +65,9 @@ if "related_source_id" not in st.session_state:
 if "related_section" not in st.session_state:
     st.session_state.related_section = None
 
+if "expanded_children_keys" not in st.session_state:
+    st.session_state.expanded_children_keys = set()
+
 if uploaded_file is not None:
     try:
         people = parse_gedcom(
