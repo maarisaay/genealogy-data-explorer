@@ -19,6 +19,10 @@ def get_display_name(person) -> str:
         if part
     )
 
+def close_related_person():
+    st.session_state.selected_person_id = None
+    st.session_state.related_source_id = None
+
 
 st.set_page_config(
     page_title="Genealogy Data Explorer",
@@ -53,6 +57,11 @@ selected_encoding = st.selectbox(
     options=encoding_options.keys(),
 )
 
+if "selected_person_id" not in st.session_state:
+    st.session_state.selected_person_id = None
+
+if "related_source_id" not in st.session_state:
+    st.session_state.related_source_id = None
 
 if uploaded_file is not None:
     try:
@@ -97,6 +106,7 @@ if uploaded_file is not None:
         if birth_year_input.strip():
             try:
                 birth_year = int(birth_year_input)
+
             except ValueError:
                 birth_year_valid = False
                 st.warning("Birth year must be a number.")
@@ -113,7 +123,6 @@ if uploaded_file is not None:
             st.divider()
 
             st.subheader("Results")
-
             st.write(f"Found {len(results)} people.")
 
             if not results:
@@ -123,23 +132,91 @@ if uploaded_file is not None:
                 for person in results[:50]:
                     full_name = get_display_name(person)
 
-                    birth_year_display = person.birth_year or "?"
-                    death_year_display = person.death_year or "?"
+                    birth_year_display = (
+                        person.birth_year
+                        if person.birth_year
+                        else "?"
+                    )
+
+                    death_year_display = (
+                        person.death_year
+                        if person.death_year
+                        else "?"
+                    )
 
                     label = (
                         f"{full_name} "
                         f"({birth_year_display} – {death_year_display})"
                     )
 
-                    with st.expander(label):
-                        if person.birth_place:
-                            st.caption(person.birth_place)
+                    # Check whether this person's profile
+                    # should contain the related-person card
+                    is_navigation_source = (
+                        st.session_state.related_source_id
+                        == person.gedcom_id
+                    )
 
-                        show_person_details(person)
+                    with st.expander(
+                        label,
+                        expanded=is_navigation_source,
+                    ):
+                        show_person_details(
+                            person,
+                            people,
+                            key_prefix=f"result_{person.gedcom_id}",
+                            navigation_source_id=person.gedcom_id,
+                        )
+
+                        # Show related person directly below
+                        # the currently opened profile
+                        if is_navigation_source:
+                            selected_person = next(
+                                (
+                                    p
+                                    for p in people
+                                    if p.gedcom_id
+                                    == st.session_state.selected_person_id
+                                ),
+                                None,
+                            )
+
+                            if selected_person is not None:
+                                st.divider()
+
+                                header_col, close_col = st.columns(
+                                    [5, 1]
+                                )
+
+                                with header_col:
+                                    st.markdown(
+                                        f"### "
+                                        f"{get_display_name(selected_person)}"
+                                    )
+
+                                with close_col:
+                                    st.button(
+                                        "✕ Close",
+                                        key=(
+                                            f"close_related_"
+                                            f"{person.gedcom_id}"
+                                        ),
+                                        on_click=close_related_person,
+                                    )
+
+                                show_person_details(
+                                    selected_person,
+                                    people,
+                                    key_prefix=(
+                                        f"related_"
+                                        f"{selected_person.gedcom_id}"
+                                    ),
+                                    navigation_source_id=person.gedcom_id,
+                                )
 
                 if len(results) > 50:
                     st.info(
-                        f"Showing the first 50 of {len(results)} results."
+                        f"Showing the first 50 of "
+                        f"{len(results)} results."
                     )
 
     except UnicodeDecodeError:
@@ -153,6 +230,7 @@ if uploaded_file is not None:
 
     except Exception as error:
         st.error(
-            "An unexpected error occurred while reading the GEDCOM file."
+            "An unexpected error occurred while reading "
+            "the GEDCOM file."
         )
         st.exception(error)
