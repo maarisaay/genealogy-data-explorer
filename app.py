@@ -2,6 +2,7 @@ import streamlit as st
 
 from src.gedcom_parser import parse_gedcom
 from src.search import search_people
+from components.person_details import show_person_details
 
 
 def get_display_name(person) -> str:
@@ -122,29 +123,19 @@ if uploaded_file is not None:
                 for person in results[:50]:
                     full_name = get_display_name(person)
 
-                    birth_year_display = (
-                        person.birth_year
-                        if person.birth_year
-                        else "?"
+                    birth_year_display = person.birth_year or "?"
+                    death_year_display = person.death_year or "?"
+
+                    label = (
+                        f"{full_name} "
+                        f"({birth_year_display} – {death_year_display})"
                     )
 
-                    death_year_display = (
-                        person.death_year
-                        if person.death_year
-                        else "?"
-                    )
+                    with st.expander(label):
+                        if person.birth_place:
+                            st.caption(person.birth_place)
 
-                    birth_place_display = (
-                        person.birth_place
-                        if person.birth_place
-                        else "Unknown place"
-                    )
-
-                    st.write(
-                        f"**{full_name}** "
-                        f"({birth_year_display} – {death_year_display})  \n"
-                        f"{birth_place_display}"
-                    )
+                        show_person_details(person)
 
                 if len(results) > 50:
                     st.info(
