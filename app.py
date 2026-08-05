@@ -21,7 +21,6 @@ def get_display_name(person) -> str:
 
 def close_related_person():
     st.session_state.selected_person_id = None
-    st.session_state.related_source_id = None
 
 
 st.set_page_config(
@@ -62,6 +61,9 @@ if "selected_person_id" not in st.session_state:
 
 if "related_source_id" not in st.session_state:
     st.session_state.related_source_id = None
+
+if "related_section" not in st.session_state:
+    st.session_state.related_section = None
 
 if uploaded_file is not None:
     try:
@@ -167,51 +169,6 @@ if uploaded_file is not None:
                             navigation_source_id=person.gedcom_id,
                         )
 
-                        # Show related person directly below
-                        # the currently opened profile
-                        if is_navigation_source:
-                            selected_person = next(
-                                (
-                                    p
-                                    for p in people
-                                    if p.gedcom_id
-                                    == st.session_state.selected_person_id
-                                ),
-                                None,
-                            )
-
-                            if selected_person is not None:
-                                st.divider()
-
-                                header_col, close_col = st.columns(
-                                    [5, 1]
-                                )
-
-                                with header_col:
-                                    st.markdown(
-                                        f"### "
-                                        f"{get_display_name(selected_person)}"
-                                    )
-
-                                with close_col:
-                                    st.button(
-                                        "✕ Close",
-                                        key=(
-                                            f"close_related_"
-                                            f"{person.gedcom_id}"
-                                        ),
-                                        on_click=close_related_person,
-                                    )
-
-                                show_person_details(
-                                    selected_person,
-                                    people,
-                                    key_prefix=(
-                                        f"related_"
-                                        f"{selected_person.gedcom_id}"
-                                    ),
-                                    navigation_source_id=person.gedcom_id,
-                                )
 
                 if len(results) > 50:
                     st.info(

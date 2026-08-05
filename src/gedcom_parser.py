@@ -254,6 +254,29 @@ def link_family_relationships(
         husband = people_by_id.get(family.husband_id)
         wife = people_by_id.get(family.wife_id)
 
+        # Link spouses
         if husband and wife:
-            husband.spouse_ids.append(wife.gedcom_id)
-            wife.spouse_ids.append(husband.gedcom_id)
+            if wife.gedcom_id not in husband.spouse_ids:
+                husband.spouse_ids.append(wife.gedcom_id)
+
+            if husband.gedcom_id not in wife.spouse_ids:
+                wife.spouse_ids.append(husband.gedcom_id)
+
+        # Link parents and children
+        for child_id in family.children_ids:
+            child = people_by_id.get(child_id)
+
+            if child is None:
+                continue
+
+            if husband:
+                child.father_id = husband.gedcom_id
+
+                if child.gedcom_id not in husband.children_ids:
+                    husband.children_ids.append(child.gedcom_id)
+
+            if wife:
+                child.mother_id = wife.gedcom_id
+
+                if child.gedcom_id not in wife.children_ids:
+                    wife.children_ids.append(child.gedcom_id)
